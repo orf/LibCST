@@ -6,6 +6,22 @@
 // Portions of this module (f-string splitting) are based on parso's tokenize.py, which is also PSF
 // licensed.
 
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::convert::TryInto;
+use std::fmt::Debug;
+use std::fmt::Formatter;
+use std::rc::Rc;
+
+use regex::Regex;
+
+use crate::tokenizer::{
+    core::string_types::{FStringNode, StringQuoteChar, StringQuoteSize},
+    operators::OPERATOR_RE,
+    text_position::{TextPosition, TextPositionSnapshot},
+    whitespace_parser::State as WhitespaceState,
+};
+
 /// A port of CPython's tokenizer.c to Rust, with the following significant modifications:
 ///
 /// - PEP 263 (encoding detection) support isn't implemented. We depend on other code to do this for
@@ -57,21 +73,6 @@
 ///
 /// [RustPython's parser]: https://crates.io/crates/rustpython-parser
 mod string_types;
-
-use regex::Regex;
-use std::cell::RefCell;
-use std::cmp::Ordering;
-use std::convert::TryInto;
-use std::fmt::Debug;
-use std::fmt::Formatter;
-use std::rc::Rc;
-
-use crate::tokenizer::{
-    core::string_types::{FStringNode, StringQuoteChar, StringQuoteSize},
-    operators::OPERATOR_RE,
-    text_position::{TextPosition, TextPositionSnapshot},
-    whitespace_parser::State as WhitespaceState,
-};
 
 /// The maximum number of indentation levels at any given point in time. CPython's tokenizer.c caps
 /// this to avoid the complexity of allocating a dynamic array, but we're using a Vec, so it's not
@@ -1111,6 +1112,7 @@ impl<'a> TokenIterator<'a> {
     }
 }
 
+
 impl<'a> Iterator for TokenIterator<'a> {
     type Item = Result<Token<'a>, TokError<'a>>;
 
@@ -1178,6 +1180,33 @@ impl<'a> Iterator for TokenIterator<'a> {
                 whitespace_before: self.previous_whitespace.as_ref().map(|r| Rc::clone(&r)).unwrap_or_default(),
                 relative_indent: None,
             })
+        })())
+    }
+}
+
+
+pub struct CheapTokenIterator<'a> {
+    core_state: TokState<'a>,
+}
+
+impl<'a> CheapTokenIterator<'a> {
+    pub fn new(module_text: &'a str, config: &TokConfig) -> Self {
+        Self {
+            core_state: TokState::new(module_text, config),
+        }
+    }
+}
+
+impl<'a> Iterator for CheapTokenIterator<'a> {
+    type Item = Result<(TokType, &'a str), TokError<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.core_state.next();
+        next.as_ref()?;
+        Some((|| {
+            let tok_type = next.unwrap()?;
+            let text_pos = &self.core_state.text_pos;
+            Ok((tok_type, text_pos.slice_from_start_pos(&self.core_state.start_pos)))
         })())
     }
 }

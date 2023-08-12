@@ -8,7 +8,7 @@ use std::cmp::{max, min};
 mod tokenizer;
 
 pub use tokenizer::whitespace_parser::Config;
-pub use tokenizer::{whitespace_parser, TokConfig, Token, TokType, TokenIterator};
+pub use tokenizer::{whitespace_parser, TokConfig, Token, TokType, TokenIterator, CheapTokenIterator};
 
 mod nodes;
 use nodes::deflated::Module as DeflatedModule;
