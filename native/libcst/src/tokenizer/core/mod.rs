@@ -1104,7 +1104,7 @@ pub struct TokenIterator<'a> {
 impl<'a> TokenIterator<'a> {
     pub fn new(module_text: &'a str, config: &TokConfig) -> Self {
         Self {
-            previous_whitespace: Default::default(),
+            previous_whitespace: Some(Default::default()),
             absolute_indents: vec![],
             core_state: TokState::new(module_text, config),
         }
