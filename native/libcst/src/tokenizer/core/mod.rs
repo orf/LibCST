@@ -1104,7 +1104,7 @@ pub struct TokenIterator<'a> {
 impl<'a> TokenIterator<'a> {
     pub fn new(module_text: &'a str, config: &TokConfig) -> Self {
         Self {
-            previous_whitespace: None,
+            previous_whitespace: Default::default(),
             absolute_indents: vec![],
             core_state: TokState::new(module_text, config),
         }
@@ -1119,64 +1119,64 @@ impl<'a> Iterator for TokenIterator<'a> {
         next.as_ref()?;
         Some((|| {
             let tok_type = next.unwrap()?;
-            let relative_indent = match tok_type {
-                TokType::Indent => {
-                    let end_idx = self.core_state.text_pos.byte_idx();
-                    let start_idx = end_idx - self.core_state.bol_width;
-                    let absolute_indent = &self.core_state.text_pos.text()[start_idx..end_idx];
-                    let relative_indent =
-                        if let Some(prev_absolute_indent) = self.absolute_indents.last() {
-                            if let Some(ri) = absolute_indent.strip_prefix(prev_absolute_indent) {
-                                ri
-                            } else {
-                                // TODO: return the correct exception type, improve error message
-                                return Err(TokError::Dedent);
-                            }
-                        } else {
-                            // there's no previous indent, absolute_indent is relative_indent
-                            absolute_indent
-                        };
-                    self.absolute_indents.push(absolute_indent);
-                    // HACKY: mutate and fixup the previous whitespace state
-                    if let Some(ws) = self.previous_whitespace.as_mut() {
-                        ws.borrow_mut().absolute_indent = absolute_indent;
-                    }
-                    Some(relative_indent)
-                }
-                TokType::Dedent => {
-                    self.absolute_indents.pop();
-                    // HACKY: mutate and fixup the previous whitespace state
-                    if let Some(ws) = self.previous_whitespace.as_mut() {
-                        ws.borrow_mut().absolute_indent =
-                            self.absolute_indents.last().unwrap_or(&"");
-                    }
-                    None
-                }
-                _ => None,
-            };
+            // let relative_indent = match tok_type {
+            //     TokType::Indent => {
+            //         let end_idx = self.core_state.text_pos.byte_idx();
+            //         let start_idx = end_idx - self.core_state.bol_width;
+            //         let absolute_indent = &self.core_state.text_pos.text()[start_idx..end_idx];
+            //         let relative_indent =
+            //             if let Some(prev_absolute_indent) = self.absolute_indents.last() {
+            //                 if let Some(ri) = absolute_indent.strip_prefix(prev_absolute_indent) {
+            //                     ri
+            //                 } else {
+            //                     // TODO: return the correct exception type, improve error message
+            //                     return Err(TokError::Dedent);
+            //                 }
+            //             } else {
+            //                 // there's no previous indent, absolute_indent is relative_indent
+            //                 absolute_indent
+            //             };
+            //         self.absolute_indents.push(absolute_indent);
+            //         // HACKY: mutate and fixup the previous whitespace state
+            //         if let Some(ws) = self.previous_whitespace.as_mut() {
+            //             ws.borrow_mut().absolute_indent = absolute_indent;
+            //         }
+            //         Some(relative_indent)
+            //     }
+            //     TokType::Dedent => {
+            //         self.absolute_indents.pop();
+            //         // HACKY: mutate and fixup the previous whitespace state
+            //         if let Some(ws) = self.previous_whitespace.as_mut() {
+            //             ws.borrow_mut().absolute_indent =
+            //                 self.absolute_indents.last().unwrap_or(&"");
+            //         }
+            //         None
+            //     }
+            //     _ => None,
+            // };
             let text_pos = &self.core_state.text_pos;
-            let whitespace_before = self.previous_whitespace.clone().unwrap_or_default();
-            let whitespace_after = match tok_type {
-                TokType::Indent | TokType::Dedent | TokType::EndMarker => whitespace_before.clone(),
-                _ => Rc::new(RefCell::new(WhitespaceState {
-                    line: text_pos.line_number(),
-                    column: text_pos.char_column_number(),
-                    column_byte: text_pos.byte_column_number(),
-                    byte_offset: text_pos.byte_idx(),
-                    absolute_indent: self.absolute_indents.last().unwrap_or(&""),
-                    is_parenthesized: self.core_state.is_parenthesized(),
-                })),
-            };
-            self.previous_whitespace = Some(whitespace_after.clone());
+            // let whitespace_before = self.previous_whitespace.clone().unwrap_or_default();
+            // let whitespace_after = match tok_type {
+            //     TokType::Indent | TokType::Dedent | TokType::EndMarker => whitespace_before.clone(),
+            //     _ => Rc::new(RefCell::new(WhitespaceState {
+            //         line: text_pos.line_number(),
+            //         column: text_pos.char_column_number(),
+            //         column_byte: text_pos.byte_column_number(),
+            //         byte_offset: text_pos.byte_idx(),
+            //         absolute_indent: self.absolute_indents.last().unwrap_or(&""),
+            //         is_parenthesized: self.core_state.is_parenthesized(),
+            //     })),
+            // };
+            // self.previous_whitespace = Some(whitespace_after.clone());
 
             Ok(Token {
                 r#type: tok_type,
                 string: text_pos.slice_from_start_pos(&self.core_state.start_pos),
                 start_pos: self.core_state.start_pos.clone(),
                 end_pos: text_pos.into(),
-                whitespace_after: whitespace_after.clone(),
-                whitespace_before: whitespace_before.clone(),
-                relative_indent,
+                whitespace_after: self.previous_whitespace.clone().unwrap(),
+                whitespace_before: self.previous_whitespace.clone().unwrap(),
+                relative_indent: None,
             })
         })())
     }
