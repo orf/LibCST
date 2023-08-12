@@ -1174,8 +1174,8 @@ impl<'a> Iterator for TokenIterator<'a> {
                 string: text_pos.slice_from_start_pos(&self.core_state.start_pos),
                 start_pos: self.core_state.start_pos.clone(),
                 end_pos: text_pos.into(),
-                whitespace_after: self.previous_whitespace.clone().unwrap(),
-                whitespace_before: self.previous_whitespace.clone().unwrap(),
+                whitespace_after: self.previous_whitespace.as_ref().map(|r| Rc::clone(&r)).unwrap_or_default(),
+                whitespace_before: self.previous_whitespace.as_ref().map(|r| Rc::clone(&r)).unwrap_or_default(),
                 relative_indent: None,
             })
         })())
