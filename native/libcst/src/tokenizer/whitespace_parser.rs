@@ -7,7 +7,6 @@ use crate::nodes::{
     Comment, EmptyLine, Fakeness, Newline, ParenthesizableWhitespace, ParenthesizedWhitespace,
     SimpleWhitespace, TrailingWhitespace,
 };
-use once_cell::sync::Lazy;
 use regex::Regex;
 use thiserror::Error;
 
@@ -15,10 +14,12 @@ use crate::Token;
 
 use super::TokType;
 
-static SIMPLE_WHITESPACE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\A([ \f\t]|\\(\r\n?|\n))*").expect("regex"));
-static NEWLINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\A(\r\n?|\n)").expect("regex"));
-static COMMENT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\A#[^\r\n]*").expect("regex"));
+thread_local! {
+    static SIMPLE_WHITESPACE_RE: Regex = Regex::new(r"\A([ \f\t]|\\(\r\n?|\n))*").expect("regex");
+static NEWLINE_RE: Regex = Regex::new(r"\A(\r\n?|\n)").expect("regex");
+static COMMENT_RE: Regex = Regex::new(r"\A#[^\r\n]*").expect("regex");
+static NEWLINE_RE_2_ELECTRIC_BOOGALOO: Regex = Regex::new(r"\r\n?|\n").expect("regex");
+}
 
 #[allow(clippy::upper_case_acronyms, clippy::enum_variant_names)]
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -73,11 +74,9 @@ impl<'a> Config<'a> {
                 break;
             }
         }
-        let default_newline = Regex::new(r"\r\n?|\n")
-            .expect("regex")
-            .find(input)
+        let default_newline = NEWLINE_RE_2_ELECTRIC_BOOGALOO.with(|r| r.find(input)
             .map(|m| m.as_str())
-            .unwrap_or("\n");
+            .unwrap_or("\n"));
 
         Self {
             input,
@@ -200,8 +199,9 @@ pub fn parse_empty_lines<'a>(
 }
 
 pub fn parse_comment<'a>(config: &Config<'a>, state: &mut State) -> Result<Option<Comment<'a>>> {
+    let newline_after = config.get_line_after_column(state.line, state.column_byte)?;
     if let Some(comment_match) =
-        COMMENT_RE.find(config.get_line_after_column(state.line, state.column_byte)?)
+        COMMENT_RE.with(|r| r.find(newline_after))
     {
         let comment_str = comment_match.as_str();
         advance_this_line(
@@ -216,8 +216,9 @@ pub fn parse_comment<'a>(config: &Config<'a>, state: &mut State) -> Result<Optio
 }
 
 pub fn parse_newline<'a>(config: &Config<'a>, state: &mut State) -> Result<Option<Newline<'a>>> {
+    let newline_after = config.get_line_after_column(state.line, state.column_byte)?;
     if let Some(newline_match) =
-        NEWLINE_RE.find(config.get_line_after_column(state.line, state.column_byte)?)
+        NEWLINE_RE.with(|r| r.find(newline_after))
     {
         let newline_str = newline_match.as_str();
         advance_this_line(
@@ -350,10 +351,11 @@ pub fn parse_simple_whitespace<'a>(
     let capture_ws = |line, col| -> Result<&'a str> {
         let x = config.get_line_after_column(line, col);
         let x = x?;
-        Ok(SIMPLE_WHITESPACE_RE
-            .find(x)
+        Ok(SIMPLE_WHITESPACE_RE.with(|r| {
+            r.find(x)
             .expect("SIMPLE_WHITESPACE_RE supports 0-length matches, so it must always match")
-            .as_str())
+            .as_str()
+        }))
     };
     let start_offset = state.byte_offset;
     let mut prev_line: &str;
